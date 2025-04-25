@@ -90,23 +90,142 @@ CREATE TABLE attribute_type (
 );
 
 
--- ATTRIBUTE CATEGORY
+CREATE TABLE `products` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(200)  NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
 
-CREATE TABLE attribute_category (
-    attribute_category_id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL
-);
+
+CREATE TABLE `attribute_definitions` (
+  `attribute_id`   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `attribute_name` VARCHAR(100)    NOT NULL UNIQUE,
+  `data_type`      ENUM('int','decimal','varchar','text','date','json')
+                    NOT NULL DEFAULT 'varchar',
+  `created_at`     TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
 
 
--- PRODUCT ATTRIBUTE
-CREATE TABLE product_attribute (
-    attribute_id INT AUTO_INCREMENT PRIMARY KEY,
-    product_id INT NOT NULL,
-    attribute_category_id INT,
-    attribute_type_id INT,
-    name VARCHAR(100) NOT NULL,
-    value VARCHAR(255),
-    FOREIGN KEY (product_id) REFERENCES product(product_id),
-    FOREIGN KEY (attribute_category_id) REFERENCES attribute_category(attribute_category_id),
-    FOREIGN KEY (attribute_type_id) REFERENCES attribute_type(attribute_type_id)
-);
+CREATE TABLE `product_attribute_values` (
+  `product_id`     INT UNSIGNED  NOT NULL,
+  `attribute_id`   INT UNSIGNED  NOT NULL,
+  `value_int`      INT           NULL,
+  `value_decimal`  DECIMAL(20,6) NULL,
+  `value_varchar`  VARCHAR(255)  NULL,
+  `value_text`     TEXT          NULL,
+  `value_date`     DATE          NULL,
+  `value_json`     JSON          NULL,
+  `updated_at`     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`product_id`,`attribute_id`))
+ ENGINE=InnoDB;
+
+-- HOW TO USE
+
+INSERT INTO attribute_definitions (attribute_name, data_type)
+VALUES
+  ('color',     'varchar'),
+  ('weight',    'decimal'),
+  ('release_at','date'),
+  ('metadata',  'json');
+   INSERT INTO attribute_definitions (attribute_name, data_type)
+VALUES ('material', 'varchar');
+
+
+  INSERT INTO product_attribute_values
+  (product_id, attribute_id, value_varchar)
+VALUES
+  (123, 1, 'Red');
+
+INSERT INTO product_attribute_values
+  (product_id, attribute_id, value_decimal)
+VALUES
+  (123, 2, 1.75);
+
+INSERT INTO product_attribute_values
+  (product_id, attribute_id, value_json)
+VALUES
+  (123, 4, '{"size":"L","materials":["cotton","poly"]}');
+
+   INSERT INTO product_attribute_values
+  (product_id, attribute_id, value_varchar)
+VALUES
+  (123, 5, 'Cotton');
+
+  
+  SELECT
+  ad.attribute_name,
+  COALESCE(
+    pav.value_int,
+    pav.value_decimal,
+    pav.value_varchar,
+    pav.value_text,
+    DATE_FORMAT(pav.value_date,'%Y-%m-%d'),
+    JSON_PRETTY(pav.value_json)
+  ) AS attribute_value
+FROM product_attribute_values AS pav
+JOIN attribute_definitions   AS ad
+  ON pav.attribute_id = ad.attribute_id
+WHERE pav.product_id = 123;
+
+--- DONE WITH PRODUCT_ATTRIBUTE
+
+--- ATTRIBUTE_CATEGORIES 
+
+CREATE TABLE `attribute_categories` (
+  `category_id`   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `category_name` VARCHAR(100)    NOT NULL UNIQUE,
+  `description`   TEXT            NULL,
+  `created_at`    TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+
+CREATE TABLE `attribute_category_map` (
+  `attribute_id` INT UNSIGNED NOT NULL,
+  `category_id`  INT UNSIGNED NOT NULL,
+  PRIMARY KEY (`attribute_id`, `category_id`),
+  FOREIGN KEY (`attribute_id`)
+    REFERENCES `attribute_definitions`(`attribute_id`)
+      ON DELETE CASCADE,
+  FOREIGN KEY (`category_id`)
+    REFERENCES `attribute_categories`(`category_id`)
+      ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+--- HOW TO USE
+INSERT INTO attribute_categories (category_name, description)
+VALUES
+  ('Display',    'Attributes related to how the product appears'),
+  ('Logistics',  'Weight, dimensions, shipping details'),
+  ('Pricing',    'Any cost-related attributes'),
+  ('Metadata',   'Extra info, tags, etc.');
+  
+
+  -- color → Display
+INSERT INTO attribute_category_map (attribute_id, category_id)
+VALUES (1, (SELECT category_id FROM attribute_categories WHERE category_name='Display'));
+
+-- weight → Logistics
+INSERT INTO attribute_category_map (attribute_id, category_id)
+VALUES (2, (SELECT category_id FROM attribute_categories WHERE category_name='Logistics'));
+
+-- release_at → Logistics
+INSERT INTO attribute_category_map (attribute_id, category_id)
+VALUES (3, (SELECT category_id FROM attribute_categories WHERE category_name='Logistics'));
+
+-- metadata → Metadata
+INSERT INTO attribute_category_map (attribute_id, category_id)
+VALUES (4, (SELECT category_id FROM attribute_categories WHERE category_name='Metadata'));
+
+SELECT
+  ad.attribute_id,
+  ad.attribute_name,
+  ad.data_type
+FROM attribute_definitions AS ad
+JOIN attribute_category_map AS acm
+  ON ad.attribute_id = acm.attribute_id
+JOIN attribute_categories AS ac
+  ON acm.category_id = ac.category_id
+WHERE ac.category_name = 'Logistics';
+
+--- DONE 
